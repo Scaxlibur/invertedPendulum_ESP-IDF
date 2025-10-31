@@ -13,13 +13,14 @@ class ADC
 
     int adcbuffer;
     
-    const char *TAG = "ADC";
+    char *TAG = "ADC";
 
     public:
     ADC(   adc_unit_t unit_id = ADC_UNIT_1, 
                 adc_channel_t chan = ADC_CHANNEL_0, 
                 adc_atten_t atten = ADC_ATTEN_DB_12, 
-                adc_bitwidth_t bitwidth = ADC_BITWIDTH_DEFAULT
+                adc_bitwidth_t bitwidth = ADC_BITWIDTH_DEFAULT,
+                char *TAG = "ADC"
             );
 
     ~ADC();
