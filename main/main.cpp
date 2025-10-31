@@ -1,11 +1,10 @@
 #include "rotary_encoder.hpp"
-#include "vertical_position.hpp"
-
-PCNT rotary_encoder(EXAMPLE_PCNT_HIGH_LIMIT, EXAMPLE_PCNT_LOW_LIMIT, 1000, EXAMPLE_EC11_GPIO_A, EXAMPLE_EC11_GPIO_B, EXAMPLE_EC11_GPIO_B, EXAMPLE_EC11_GPIO_A, example_pcnt_on_reach);
-
+#include "adc.hpp"
+#include "motor.hpp"
 
 void rotary_encoder_task(void *arg)
 {
+    PCNT rotary_encoder(EXAMPLE_PCNT_HIGH_LIMIT, EXAMPLE_PCNT_LOW_LIMIT, 1000, EXAMPLE_EC11_GPIO_A, EXAMPLE_EC11_GPIO_B, EXAMPLE_EC11_GPIO_B, EXAMPLE_EC11_GPIO_A, example_pcnt_on_reach);
     while (true)
     {
         rotary_encoder.print_count();
@@ -15,15 +14,29 @@ void rotary_encoder_task(void *arg)
 
 void ADC_task(void *arg)
 {
-    ESP_ERROR_CHECK(adc_continuous_start(ADC_handle));
+    ADC vertical_position;
     while (true)
     {
-        // ADC reading and processing logic
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        vertical_position.print_data();
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+    }
+}
+
+void motor_task(void *arg)
+{
+    motor_timer_init();
+    motor_channel_init();
+    motor_control_init();
+    motor_set_duty(128);
+    while (true)
+    {
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
     }
 }
 
 extern "C" void app_main(void)
 {
-    xTaskCreatePinnedToCore(rotary_encoder_task, "rotary_encoder_task", 4096, NULL, 5, NULL, 1);   
+    xTaskCreate(rotary_encoder_task, "rotary_encoder_task", 4096, NULL, 5, NULL);
+    xTaskCreate(ADC_task, "ADC_task", 4096, NULL, 5, NULL); 
+    xTaskCreate(motor_task, "motor_task", 4096, NULL, 5, NULL);
 }
