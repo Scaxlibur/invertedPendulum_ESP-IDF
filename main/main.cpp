@@ -5,7 +5,7 @@
 
 void rotary_encoder_task(void *arg)
 {
-    PCNT rotary_encoder(EXAMPLE_PCNT_HIGH_LIMIT, EXAMPLE_PCNT_LOW_LIMIT, 1000, EXAMPLE_EC11_GPIO_A, EXAMPLE_EC11_GPIO_B, EXAMPLE_EC11_GPIO_B, EXAMPLE_EC11_GPIO_A, example_pcnt_on_reach);
+    PCNT rotary_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, EC11_GPIO_A, EC11_GPIO_B, EC11_GPIO_B, EC11_GPIO_A, pcnt_on_reach);
     while (true)
     {
         rotary_encoder.print_count();
