@@ -20,3 +20,18 @@ void key1_press_cb(void *arg,void *usr_data)
 {
     ESP_LOGI("key1", "BUTTON_SINGLE_CLICK");
 }
+
+void key2_press_cb(void *arg,void *usr_data)
+{
+    ESP_LOGI("key2", "BUTTON_SINGLE_CLICK");
+}
+
+void key3_press_cb(void *arg,void *usr_data)
+{
+    ESP_LOGI("key3", "BUTTON_SINGLE_CLICK");
+}
+
+void key4_press_cb(void *arg,void *usr_data)
+{
+    ESP_LOGI("key4", "BUTTON_SINGLE_CLICK");
+}
