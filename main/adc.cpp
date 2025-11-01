@@ -23,3 +23,9 @@ void ADC::print_data()
     adc_oneshot_read(adc_handle, chan, &adcbuffer);
     ESP_LOGI(TAG, "ADC原始数据: %d", adcbuffer);
 }   
+
+int ADC::read()
+{
+    adc_oneshot_read(adc_handle, chan, &adcbuffer);
+    return adcbuffer;
+}

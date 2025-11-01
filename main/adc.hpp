@@ -26,4 +26,5 @@ class ADC
     ~ADC();
     void init();
     void print_data();
+    int read();
 };
