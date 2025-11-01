@@ -35,10 +35,12 @@ class PCNT
     QueueHandle_t queue;
     int pulse_count = 0;
     int event_count = 0;
+    int last_call_count = 0;
 
     const char *TAG = "PCNT";
 
     public:
+
     PCNT(   int high_limit = PCNT_HIGH_LIMIT,
             int low_limit = PCNT_LOW_LIMIT,
             uint32_t max_glitch_ns = 1000,
@@ -50,6 +52,8 @@ class PCNT
         );
     ~PCNT();
     void print_count();
+    int location(); //获取当前位置
+    int delta();   //计算上次调用以来的增量值
 
 };
 

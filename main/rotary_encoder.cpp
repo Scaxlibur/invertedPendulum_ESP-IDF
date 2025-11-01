@@ -99,3 +99,17 @@ void PCNT::print_count(void)
     }
 
 }
+
+int PCNT::delta(void)
+{
+    int current_count;
+    ESP_ERROR_CHECK(pcnt_unit_get_count(pcnt_unit, &current_count));
+    return current_count - last_call_count;
+}
+
+int PCNT::location(void)
+{
+    int current_count;
+    ESP_ERROR_CHECK(pcnt_unit_get_count(pcnt_unit, &current_count));
+    return current_count;
+}
