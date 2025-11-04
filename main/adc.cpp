@@ -12,6 +12,11 @@ ADC::ADC(adc_unit_t unit_id, adc_channel_t chan, adc_atten_t atten, adc_bitwidth
     ESP_LOGI(this->TAG, "ADC对象创建完成");
 }
 
+ADC::~ADC()
+{
+    
+}
+
 void ADC::init()
 {
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc_init_config, &adc_handle));
