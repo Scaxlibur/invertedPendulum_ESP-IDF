@@ -44,13 +44,13 @@ void motor_set_duty(int8_t duty)
 {
     if(duty >= 0)
     {
-        gpio_set_level(CONTRAL_A_GPIO_NUM, 1);
-        gpio_set_level(CONTRAL_B_GPIO_NUM, 0);
+        ESP_ERROR_CHECK(gpio_set_level(CONTRAL_A_GPIO_NUM, 1));
+        ESP_ERROR_CHECK(gpio_set_level(CONTRAL_B_GPIO_NUM, 0));
         ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, motor_channel, duty));
         ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, motor_channel));
     }else{
-        gpio_set_level(CONTRAL_A_GPIO_NUM, 0);
-        gpio_set_level(CONTRAL_B_GPIO_NUM, 1);
+        ESP_ERROR_CHECK(gpio_set_level(CONTRAL_A_GPIO_NUM, 0));
+        ESP_ERROR_CHECK(gpio_set_level(CONTRAL_B_GPIO_NUM, 1));
         ESP_ERROR_CHECK(ledc_set_duty(LEDC_LOW_SPEED_MODE, motor_channel, duty * -1));
         ESP_ERROR_CHECK(ledc_update_duty(LEDC_LOW_SPEED_MODE, motor_channel));
     }
