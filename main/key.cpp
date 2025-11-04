@@ -16,6 +16,7 @@ key::key(const char *TAG, int32_t gpio_num, button_cb_t cb_func)
 
 }
 
+/*
 void key1_press_cb(void *arg,void *usr_data)
 {
     ESP_LOGI("key1", "BUTTON_SINGLE_CLICK");
@@ -34,4 +35,4 @@ void key3_press_cb(void *arg,void *usr_data)
 void key4_press_cb(void *arg,void *usr_data)
 {
     ESP_LOGI("key4", "BUTTON_SINGLE_CLICK");
-}
+}*/
