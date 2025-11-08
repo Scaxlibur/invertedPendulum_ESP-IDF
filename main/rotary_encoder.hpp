@@ -13,7 +13,7 @@
 #define PCNT_HIGH_LIMIT (CERCLE_NUM*2)
 #define PCNT_LOW_LIMIT  (CERCLE_NUM*-2)
 
-#define EC11_GPIO_A 0
+#define EC11_GPIO_A 38
 #define EC11_GPIO_B 2
 
 bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx);
