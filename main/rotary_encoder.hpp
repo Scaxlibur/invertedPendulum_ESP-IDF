@@ -54,6 +54,7 @@ class PCNT
     void print_count();
     int location(); //获取当前位置
     int delta();   //计算上次调用以来的增量值
+    void print_data();
 
 };
 

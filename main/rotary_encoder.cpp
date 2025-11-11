@@ -113,3 +113,10 @@ int PCNT::location(void)
     ESP_ERROR_CHECK(pcnt_unit_get_count(pcnt_unit, &current_count));
     return current_count;
 }
+
+void PCNT::print_data(void)
+{
+    int current_count;
+    ESP_ERROR_CHECK(pcnt_unit_get_count(pcnt_unit, &current_count));
+    ESP_LOGI(TAG, "编码器：%d", current_count);
+}
