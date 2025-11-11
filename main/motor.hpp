@@ -10,5 +10,5 @@
 void motor_timer_init();
 void motor_channel_init();
 void motor_control_init();
-void motor_set_duty(int8_t duty);
+void motor_set_duty(int16_t duty);
 

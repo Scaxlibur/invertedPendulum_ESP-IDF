@@ -40,7 +40,7 @@ void motor_control_init()
     ESP_ERROR_CHECK(gpio_config(&motor_gpio_cfg));
 }
 
-void motor_set_duty(int8_t duty)
+void motor_set_duty(int16_t duty)
 {
     if(duty >= 0)
     {
