@@ -42,7 +42,6 @@ void motor_control_init()
 
 void motor_set_duty(int8_t duty)
 {
-    duty = duty * 2.56;
     if(duty >= 0)
     {
         ESP_ERROR_CHECK(gpio_set_level(CONTRAL_A_GPIO_NUM, 1));
