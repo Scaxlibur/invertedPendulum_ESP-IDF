@@ -4,52 +4,60 @@
 #include "key.hpp"
 #include "PID.hpp"
 
-#define Center_Angle 1950    //中心角度
-#define Center_Range 500     //调控区间，±500
-#define START_PWM    90      //启摆时的PWM
-#define START_TIME   100     //启摆时的驱动时间
+constexpr int16_t Center_Angle = 1960;  //中心角度
+constexpr int16_t Center_Range = 500;   //调控区间，±500
+constexpr int16_t START_PWM = 90;       //启摆时的PWM
+constexpr uint8_t START_TIME = 100;     //启摆时的驱动时间
 
 /**
  * 引脚宏定义
  */
 
-#define KEY1_GPIO_NUM GPIO_NUM_4
-#define KEY2_GPIO_NUM GPIO_NUM_5
-#define KEY3_GPIO_NUM GPIO_NUM_6
-#define KEY4_GPIO_NUM GPIO_NUM_7
+constexpr gpio_num_t KEY1_GPIO_NUM = GPIO_NUM_4;
+constexpr gpio_num_t KEY2_GPIO_NUM = GPIO_NUM_5;
+constexpr gpio_num_t KEY3_GPIO_NUM = GPIO_NUM_6;
+constexpr gpio_num_t KEY4_GPIO_NUM = GPIO_NUM_7;
 
 TaskHandle_t rotary_encoder_task_handle = NULL;
 TaskHandle_t angle_task_handle = NULL;
 TaskHandle_t motor_task_handle = NULL;
 TaskHandle_t key_task_handle = NULL;
 TaskHandle_t control_task_handle = NULL;
+TaskHandle_t log_task_handle = NULL;
 
+/**
+ * 控制任务的通信队列
+ */
 QueueHandle_t rotary_encoder_com_handle = NULL;     // 旋转编码器通信队列
 QueueHandle_t angle_com_handle = NULL;              // ADC通信队列
+QueueHandle_t log_runstate_com_handle = NULL;       // 日志_状态通信队列
 
+/**
+ * 控制任务的请求任务
+ */
 QueueHandle_t rotary_encoder_request_handle = NULL; // 旋转编码器请求队列
 QueueHandle_t angle_request_handle = NULL;          // ADC请求队列
 
-PCNT rotary_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, EC11_GPIO_A, EC11_GPIO_B, EC11_GPIO_B, EC11_GPIO_A, pcnt_on_reach);
+PCNT rotary_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, MOTOR_ENCODER_GPIO_A, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_A, pcnt_on_reach);
 ADC vertical_position;
 
 PID_t Location_Pid; // 外环，位置环
 
 typedef enum runstate_t
 {
-    STOPPED = 0,
-    WAITING_FOR_START = 1,
-    SWINGING_UP_LEFT = 21,
-    SWINGING_UP_LEFT_DELAY = 22,
-    SWINGING_UP_LEFT_BACK = 23,
-    SWINGING_UP_LEFT_JUDGE = 24,
+    STOPPED,
+    WAITING_FOR_START,
+    SWINGING_UP_LEFT,
+    SWINGING_UP_LEFT_DELAY,
+    SWINGING_UP_LEFT_BACK,
+    SWINGING_UP_LEFT_JUDGE,
 
-    SWINGING_UP_RIGHT = 31,
-    SWINGING_UP_RIGHT_DELAY = 32,
-    SWINGING_UP_RIGHT_BACK = 33,
-    SWINGING_UP_RIGHT_JUDGE = 34,
+    SWINGING_UP_RIGHT,
+    SWINGING_UP_RIGHT_DELAY,
+    SWINGING_UP_RIGHT_BACK,
+    SWINGING_UP_RIGHT_JUDGE,
 
-    BALANCING = 4
+    BALANCING
 } runstate_t;
 
 runstate_t RunState = STOPPED;
@@ -123,9 +131,6 @@ void control_task(void *arg)
     BaseType_t ADC_com_status;
 
     static uint16_t Count;
-    static uint16_t Count2;
-    static uint16_t CountStart;
-    static uint16_t Count0;
     static uint16_t Angle0,Angle1,Angle2;//本次，上次，上上次
 
     PID_t Angle_Pid;
@@ -148,13 +153,10 @@ void control_task(void *arg)
     int Angle;
     int Location;
 
+    uint16_t count_stop_log = 0;
+
     bool request = true;
 
-    // 下面三行都用通信队列替换了
-    // Angle = vertical_position.read();
-    // Location = rotary_encoder.location();
-
-    // ESP_LOGI("control_task", "控制任务就绪");
     while(true)
     {
         xQueueSendToFront(angle_request_handle, &request, portMAX_DELAY);
@@ -167,7 +169,13 @@ void control_task(void *arg)
         {
             case STOPPED:  // 停止状态
                 motor_set_duty(0);
-                ESP_LOGI(TAG, "停止状态，当前角度：%d，位置：%d", Angle, Location);
+                count_stop_log++;
+                if(count_stop_log >= 10000)
+                {
+                    count_stop_log = 0;
+                    ESP_LOGI(TAG, "停止状态，当前角度：%d，位置：%d", Angle, Location);
+                }
+                
                 break;
                 
             case WAITING_FOR_START: // 等待起摆检测状态
@@ -220,16 +228,19 @@ void control_task(void *arg)
                 motor_set_duty(START_PWM);
                 RunState = SWINGING_UP_LEFT_DELAY;
                 ESP_LOGI(TAG, "左侧启摆");
+                break;
 
             case SWINGING_UP_LEFT_DELAY:    // 保持脉冲一定时间(START_TIME)
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 RunState = SWINGING_UP_LEFT_BACK;
                 ESP_LOGI(TAG, "左侧等待");
+                break;
 
             case SWINGING_UP_LEFT_BACK:
                 motor_set_duty(-START_PWM);
                 RunState = SWINGING_UP_LEFT_JUDGE;
                 ESP_LOGI(TAG, "左侧回转");
+                break;
 
             case SWINGING_UP_LEFT_JUDGE:    // 保持脉冲后返回检测状态
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
@@ -245,16 +256,19 @@ void control_task(void *arg)
                 motor_set_duty(-START_PWM);
                 RunState = SWINGING_UP_RIGHT_DELAY;
                 ESP_LOGI(TAG, "右侧起摆");
+                break;
 
             case SWINGING_UP_RIGHT_DELAY:    // 保持脉冲
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 RunState = SWINGING_UP_RIGHT_BACK;
                 ESP_LOGI(TAG, "右侧等待");
+                break;
 
             case SWINGING_UP_RIGHT_BACK:    // 施加正向PWM脉冲
                 motor_set_duty(START_PWM);
                 RunState = SWINGING_UP_RIGHT_JUDGE;   
                 ESP_LOGI(TAG, "右侧回转");
+                break;
 
             case SWINGING_UP_RIGHT_JUDGE:    // 保持脉冲后返回检测状态
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
@@ -297,10 +311,22 @@ void control_task(void *arg)
                 
                 */
                 
-            break;
+                break;
         }
         vTaskDelay(5 / portTICK_PERIOD_MS);
     }
+}
+
+void log_task(void *arg)    // 日志任务
+{
+    int Angle;
+    int Location;
+    while(true)
+    {
+        xQueueReceive(rotary_encoder_com_handle, &Location, portMAX_DELAY);
+        xQueueReceive(angle_com_handle, &Angle, portMAX_DELAY);
+    }
+    
 }
 
 void key1_press_cb(void *arg,void *usr_data)
@@ -344,29 +370,15 @@ extern "C" void app_main(void)
 {
     rotary_encoder_com_handle = xQueueCreate(1, sizeof(int));
     angle_com_handle = xQueueCreate(1, sizeof(int));
+    log_runstate_com_handle = xQueueCreate(1, sizeof(runstate_t));
 
     rotary_encoder_request_handle = xQueueCreate(1, sizeof(bool));
     angle_request_handle = xQueueCreate(1, sizeof(bool));
 
-    
     xTaskCreate(rotary_encoder_task, "rotary_encoder_task", 1024, NULL, 5, NULL);
     xTaskCreate(angle_task, "angle", 4096, NULL, 5, NULL); 
     xTaskCreate(motor_task, "motor_task", 4096, NULL, 5, NULL);
     xTaskCreate(key_task, "key_task", 4096, NULL, 5, NULL);
     xTaskCreate(control_task, "control_task", 8192, NULL, 10, NULL);
-    
-    
-    /*
-    motor_timer_init();
-    motor_channel_init();
-    motor_control_init();
-    while(true)
-    {   
-        motor_set_duty(255);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-        motor_set_duty(-255);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-    */
 
 }
