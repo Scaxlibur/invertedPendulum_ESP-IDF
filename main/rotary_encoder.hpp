@@ -9,12 +9,13 @@
 #include "driver/gpio.h"
 #include "esp_sleep.h"
 
-#define CERCLE_NUM 408  // 电机编码器每转一圈的脉冲数
-#define PCNT_HIGH_LIMIT (CERCLE_NUM*2)
-#define PCNT_LOW_LIMIT  (CERCLE_NUM*-2)
+constexpr uint16_t CERCLE_NUM = 408;  // 电机编码器每转一圈的脉冲数
+constexpr int PCNT_HIGH_LIMIT = CERCLE_NUM*10;
+constexpr int PCNT_LOW_LIMIT = CERCLE_NUM*-10;
 
-#define EC11_GPIO_A 38
-#define EC11_GPIO_B 2
+constexpr gpio_num_t MOTOR_ENCODER_GPIO_A = GPIO_NUM_38;
+constexpr gpio_num_t MOTOR_ENCODER_GPIO_B = GPIO_NUM_2;
+
 
 bool pcnt_on_reach(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t *edata, void *user_ctx);
 
@@ -41,14 +42,14 @@ class PCNT
 
     public:
 
-    PCNT(   int high_limit = PCNT_HIGH_LIMIT,
-            int low_limit = PCNT_LOW_LIMIT,
-            uint32_t max_glitch_ns = 1000,
-            int chan_a_edge_gpio_num = EC11_GPIO_A,
-            int chan_a_level_gpio_num = EC11_GPIO_B,
-            int chan_b_edge_gpio_num = EC11_GPIO_B,
-            int chan_b_level_gpio_num = EC11_GPIO_A,
-            pcnt_watch_cb_t on_reach = pcnt_on_reach
+    PCNT(   int high_limit,
+            int low_limit,
+            uint32_t max_glitch_ns,
+            int chan_a_edge_gpio_num,
+            int chan_a_level_gpio_num,
+            int chan_b_edge_gpio_num,
+            int chan_b_level_gpio_num,
+            pcnt_watch_cb_t on_reach
         );
     ~PCNT();
     void print_count();
