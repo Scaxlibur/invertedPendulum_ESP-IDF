@@ -4,7 +4,7 @@
 #include "key.hpp"
 #include "PID.hpp"
 
-#define Center_Angle 2045    //中心角度
+#define Center_Angle 1950    //中心角度
 #define Center_Range 500     //调控区间，±500
 #define START_PWM    90      //启摆时的PWM
 #define START_TIME   100     //启摆时的驱动时间
@@ -167,6 +167,7 @@ void control_task(void *arg)
         {
             case STOPPED:  // 停止状态
                 motor_set_duty(0);
+                ESP_LOGI(TAG, "停止状态，当前角度：%d，位置：%d", Angle, Location);
                 break;
                 
             case WAITING_FOR_START: // 等待起摆检测状态
@@ -176,6 +177,7 @@ void control_task(void *arg)
                  * 左侧最高点检测: 连续3个角度值都在中心角度-调控区间以下，且中间值为最高点
                  * 进入平衡条件: 连续2个角度值都在调控区间内
                  */
+                ESP_LOGI(TAG, "等待状态，当前角度：%d，位置：%d", Angle, Location);
                 vTaskDelay(40 / portTICK_PERIOD_MS);
 
                 Angle2 = Angle1;
@@ -217,19 +219,23 @@ void control_task(void *arg)
             case SWINGING_UP_LEFT:
                 motor_set_duty(START_PWM);
                 RunState = SWINGING_UP_LEFT_DELAY;
+                ESP_LOGI(TAG, "左侧启摆");
 
             case SWINGING_UP_LEFT_DELAY:    // 保持脉冲一定时间(START_TIME)
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 RunState = SWINGING_UP_LEFT_BACK;
+                ESP_LOGI(TAG, "左侧等待");
 
             case SWINGING_UP_LEFT_BACK:
                 motor_set_duty(-START_PWM);
                 RunState = SWINGING_UP_LEFT_JUDGE;
+                ESP_LOGI(TAG, "左侧回转");
 
             case SWINGING_UP_LEFT_JUDGE:    // 保持脉冲后返回检测状态
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 motor_set_duty(0);
                 RunState = WAITING_FOR_START;
+                ESP_LOGI(TAG, "左侧回转等待");
                 break;
 
             /**
@@ -238,32 +244,37 @@ void control_task(void *arg)
             case SWINGING_UP_RIGHT:    // 施加反向PWM脉冲
                 motor_set_duty(-START_PWM);
                 RunState = SWINGING_UP_RIGHT_DELAY;
+                ESP_LOGI(TAG, "右侧起摆");
 
             case SWINGING_UP_RIGHT_DELAY:    // 保持脉冲
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 RunState = SWINGING_UP_RIGHT_BACK;
+                ESP_LOGI(TAG, "右侧等待");
 
             case SWINGING_UP_RIGHT_BACK:    // 施加正向PWM脉冲
                 motor_set_duty(START_PWM);
                 RunState = SWINGING_UP_RIGHT_JUDGE;   
+                ESP_LOGI(TAG, "右侧回转");
 
             case SWINGING_UP_RIGHT_JUDGE:    // 保持脉冲后返回检测状态
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 motor_set_duty(0);
                 RunState = WAITING_FOR_START;
+                ESP_LOGI(TAG, "右侧回转等待");
                 break;
 
             /**
              * RunState = 4: 平衡控制状态
              */
             case BALANCING:
+                ESP_LOGI(TAG, "平衡控制");
                 if ( !(Center_Angle - Center_Range < Angle && Angle < Center_Angle + Center_Range) )//倒立摆不在可调控区间
                 {
                     RunState = STOPPED;
                 }
 
                 Count++;
-                if (Count >= 5)//设置PID调控周期
+                if (Count >= 1)//设置PID调控周期
                 {
                     // 角度环(内环): 5ms周期，直接控制电机维持角度平衡
                     Count = 0;
@@ -272,8 +283,10 @@ void control_task(void *arg)
                     motor_set_duty(Angle_Pid.Out);
                 }     
 
+                /*
+                
                 Count2++;
-                if (Count2 >= 50)
+                if (Count2 >= 10)
                 {
                     // 位置环(外环): 250ms周期，通过调整角度目标值来控制小车位置
                     Count2 = 0;
@@ -281,6 +294,9 @@ void control_task(void *arg)
                     PID_Update(&Location_Pid);
                     Angle_Pid.Target = Location_Pid.Out + Center_Angle;//位置环输出通过改变中心角度，从而实现位置的固定
                 }
+                
+                */
+                
             break;
         }
         vTaskDelay(5 / portTICK_PERIOD_MS);
