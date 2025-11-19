@@ -24,6 +24,7 @@ TaskHandle_t motor_task_handle = NULL;
 TaskHandle_t key_task_handle = NULL;
 TaskHandle_t control_task_handle = NULL;
 TaskHandle_t log_task_handle = NULL;
+TaskHandle_t PIDset_task_handle = NULL;
 
 /**
  * 控制任务的通信队列
@@ -31,6 +32,7 @@ TaskHandle_t log_task_handle = NULL;
 QueueHandle_t rotary_encoder_com_handle = NULL;     // 旋转编码器通信队列
 QueueHandle_t angle_com_handle = NULL;              // ADC通信队列
 QueueHandle_t log_runstate_com_handle = NULL;       // 日志_状态通信队列
+QueueHandle_t pid_set_com_handle = NULL;            // PID设置通信队列
 
 /**
  * 控制任务的请求队列
@@ -47,6 +49,8 @@ PCNT rotary_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, MOTOR_ENCODER_GPIO_A,
 ADC vertical_position;
 
 PID_t Location_Pid; // 外环，位置环
+PID_t Angle_Pid;    // 内环，角度环
+
 
 typedef enum runstate_t
 {
@@ -145,13 +149,14 @@ void control_task(void *arg)
     static uint16_t Count;
     static uint16_t Angle0,Angle1,Angle2;//本次，上次，上上次
 
-    PID_t Angle_Pid;
         Angle_Pid.Target = Center_Angle;
         Angle_Pid.OutMax = 255;
         Angle_Pid.OutMin = -255;
         Angle_Pid.Kp = 0.3;
-        Angle_Pid.Ki = 0.01;
-        Angle_Pid.Kd = 0.4;
+        Angle_Pid.Ki = 0.0;
+        Angle_Pid.Kd = 0.0;
+    PID_t receive_Pid;  // 从PID设置接受的参数
+
 
     //外环，位置环
     
@@ -168,7 +173,7 @@ void control_task(void *arg)
 
     uint16_t count_stop_log = 0;
 
-    bool request = true;
+    bool request = true;  
 
     while(true)
     {
@@ -183,6 +188,11 @@ void control_task(void *arg)
         logdata.State = RunState;
         if(xQueueReceive(log_request_handle, &request, 0) == pdTRUE)
             xQueueSend(log_runstate_com_handle, &logdata, portMAX_DELAY);
+        if(xQueueReceive(pid_set_com_handle, &receive_Pid, 0) == pdTRUE)
+        {
+            Angle_Pid.Kp = receive_Pid.Kp;
+            ESP_LOGI(TAG, "更新PID参数：Kp=%f, Ki=%f, Kd=%f", Angle_Pid.Kp, Angle_Pid.Ki, Angle_Pid.Kd);
+        }
         //自动启摆程序
         switch(RunState)
         {
@@ -300,17 +310,17 @@ void control_task(void *arg)
              * RunState = 4: 平衡控制状态
              */
             case BALANCING:
-                // ESP_LOGI(TAG, "平衡控制");
+                // ESP_LOGI(TAG, "平衡控制，角度：%d，位置：%d", Angle, Location);
                 if ( !(Center_Angle - Center_Range < Angle && Angle < Center_Angle + Center_Range) )//倒立摆不在可调控区间
                 {
                     RunState = STOPPED;
                 }
 
-                Count++;
-                if (Count >= 1)//设置PID调控周期
+                // Count++;
+                // if (Count >= 1)//设置PID调控周期
                 {
                     // 角度环(内环): 5ms周期，直接控制电机维持角度平衡
-                    Count = 0;
+                    // Count = 0;
                     Angle_Pid.Actual = Angle;
                     PID_Update(&Angle_Pid);
                     motor_set_duty(Angle_Pid.Out);
@@ -334,6 +344,34 @@ void control_task(void *arg)
         }
         vTaskDelay(5 / portTICK_PERIOD_MS);
     }
+}
+
+void PIDset_task(void *arg)
+{
+    ADC p_set(ADC_UNIT_2, ADC_CHANNEL_3, ADC_ATTEN_DB_12, ADC_BITWIDTH_12, "p_set");
+    float kp_temp = 0.4;
+    float ki_temp = 0;
+    float kd_temp = 0;
+
+    PID_t pid_send; // 要发送的pid
+    pid_send.Target = 0;
+    pid_send.OutMax = 255;
+    pid_send.OutMin = -255;
+    pid_send.Kp = 0.4;
+    pid_send.Ki = 0;
+    pid_send.Kd = 0;
+    while(true)
+    {
+        kp_temp = (p_set.read() / 4095.0) * 2.0; // 0 到 2.0
+        if(kp_temp - pid_send.Kp > 0.05 || kp_temp - pid_send.Kp < -0.05)
+        {
+            pid_send.Kp = kp_temp;
+            ESP_LOGI("PIDset_task", "更新Kp: %f", pid_send.Kp);
+            xQueueSend(pid_set_com_handle, &pid_send, portMAX_DELAY);
+        }
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+
 }
 
 void log_task(void *arg)    // 日志任务
@@ -391,6 +429,14 @@ void log_task(void *arg)    // 日志任务
     
 }
 
+void figure_task(void *arg) // 串口曲线打印任务
+{
+    while(true)
+    {
+        vTaskDelay(portMAX_DELAY);
+    }
+}
+
 void key1_press_cb(void *arg,void *usr_data)
 {
     ESP_LOGI("key1", "按下，启动/停止切换");
@@ -433,17 +479,19 @@ extern "C" void app_main(void)
     rotary_encoder_com_handle = xQueueCreate(1, sizeof(int));
     angle_com_handle = xQueueCreate(1, sizeof(int));
     log_runstate_com_handle = xQueueCreate(1, sizeof(logdata_t));
+    pid_set_com_handle = xQueueCreate(1, sizeof(PID_t));
 
     rotary_encoder_request_handle = xQueueCreate(1, sizeof(bool));
     angle_request_handle = xQueueCreate(1, sizeof(bool));
 
     log_request_handle = xQueueCreate(1, sizeof(bool));
 
-    xTaskCreate(rotary_encoder_task, "rotary_encoder_task", 1024, NULL, 5, NULL);
-    xTaskCreate(angle_task, "angle", 4096, NULL, 5, NULL); 
-    xTaskCreate(motor_task, "motor_task", 4096, NULL, 5, NULL);
-    xTaskCreate(key_task, "key_task", 4096, NULL, 5, NULL);
+    xTaskCreate(rotary_encoder_task, "rotary_encoder_task", 1024, NULL, 9, NULL);
+    xTaskCreate(angle_task, "angle", 4096, NULL, 9, NULL); 
+    xTaskCreate(motor_task, "motor_task", 4096, NULL, 9, NULL);
+    xTaskCreate(key_task, "key_task", 4096, NULL, 9, NULL);
     xTaskCreate(control_task, "control_task", 8192, NULL, 10, NULL);
     xTaskCreate(log_task, "log_task", 8192, NULL, 5, NULL);
+    xTaskCreate(PIDset_task, "PIDset_task", 4096, NULL, 5, NULL);
 
 }
