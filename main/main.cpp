@@ -25,6 +25,7 @@ TaskHandle_t key_task_handle = NULL;
 TaskHandle_t control_task_handle = NULL;
 TaskHandle_t log_task_handle = NULL;
 TaskHandle_t PIDset_task_handle = NULL;
+TaskHandle_t figure_task_handle = NULL;
 
 /**
  * 控制任务的通信队列
@@ -33,6 +34,7 @@ QueueHandle_t rotary_encoder_com_handle = NULL;     // 旋转编码器通信队�
 QueueHandle_t angle_com_handle = NULL;              // ADC通信队列
 QueueHandle_t log_runstate_com_handle = NULL;       // 日志_状态通信队列
 QueueHandle_t pid_set_com_handle = NULL;            // PID设置通信队列
+QueueHandle_t figure_com_handle = NULL;             // 串口曲线打印通信队列
 
 /**
  * 控制任务的请求队列
@@ -44,12 +46,12 @@ QueueHandle_t angle_request_handle = NULL;          // ADC请求队列
  * 日志任务的请求队列
  */
 QueueHandle_t log_request_handle = NULL;            // 日志请求队列
+QueueHandle_t figure_request_handle = NULL;         // 曲线打印请求队列
 
 PCNT rotary_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, MOTOR_ENCODER_GPIO_A, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_A, pcnt_on_reach);
 ADC vertical_position;
 
 PID_t Location_Pid; // 外环，位置环
-PID_t Angle_Pid;    // 内环，角度环
 
 
 typedef enum runstate_t
@@ -149,14 +151,15 @@ void control_task(void *arg)
     static uint16_t Count;
     static uint16_t Angle0,Angle1,Angle2;//本次，上次，上上次
 
+    PID_t Angle_Pid;    // 内环，角度环
+    PID_t receive_Pid;  // 从PID设置接受的参数
+
         Angle_Pid.Target = Center_Angle;
         Angle_Pid.OutMax = 255;
         Angle_Pid.OutMin = -255;
         Angle_Pid.Kp = 0.3;
         Angle_Pid.Ki = 0.0;
         Angle_Pid.Kd = 0.0;
-    PID_t receive_Pid;  // 从PID设置接受的参数
-
 
     //外环，位置环
     
@@ -193,6 +196,8 @@ void control_task(void *arg)
             Angle_Pid.Kp = receive_Pid.Kp;
             ESP_LOGI(TAG, "更新PID参数：Kp=%f, Ki=%f, Kd=%f", Angle_Pid.Kp, Angle_Pid.Ki, Angle_Pid.Kd);
         }
+        if(xQueueReceive(figure_request_handle, &request, 0) == pdTRUE)
+            xQueueSend(figure_com_handle, &Angle_Pid, 0);
         //自动启摆程序
         switch(RunState)
         {
@@ -431,9 +436,16 @@ void log_task(void *arg)    // 日志任务
 
 void figure_task(void *arg) // 串口曲线打印任务
 {
+    constexpr char *TAG = "figure_task";
+    constexpr bool request = true;
+    constexpr uint16_t FIGURE_INTERVAL_MS = 50; // 曲线打印间隔时间，单位毫秒
+    PID_t angle_pid;
     while(true)
     {
-        vTaskDelay(portMAX_DELAY);
+        xQueueSend(figure_request_handle, &request, 0);
+        xQueueReceive(figure_com_handle, &angle_pid, portMAX_DELAY);
+        printf("%f,%f,%f\n", angle_pid.Target, angle_pid.Actual, angle_pid.Out);
+        vTaskDelay(FIGURE_INTERVAL_MS / portTICK_PERIOD_MS);
     }
 }
 
@@ -480,11 +492,13 @@ extern "C" void app_main(void)
     angle_com_handle = xQueueCreate(1, sizeof(int));
     log_runstate_com_handle = xQueueCreate(1, sizeof(logdata_t));
     pid_set_com_handle = xQueueCreate(1, sizeof(PID_t));
+    figure_com_handle = xQueueCreate(1, sizeof(PID_t));
 
     rotary_encoder_request_handle = xQueueCreate(1, sizeof(bool));
     angle_request_handle = xQueueCreate(1, sizeof(bool));
 
     log_request_handle = xQueueCreate(1, sizeof(bool));
+    figure_request_handle = xQueueCreate(1, sizeof(bool));
 
     xTaskCreate(rotary_encoder_task, "rotary_encoder_task", 1024, NULL, 9, NULL);
     xTaskCreate(angle_task, "angle", 4096, NULL, 9, NULL); 
@@ -493,5 +507,5 @@ extern "C" void app_main(void)
     xTaskCreate(control_task, "control_task", 8192, NULL, 10, NULL);
     xTaskCreate(log_task, "log_task", 8192, NULL, 5, NULL);
     xTaskCreate(PIDset_task, "PIDset_task", 4096, NULL, 5, NULL);
-
+    xTaskCreate(figure_task, "figure_task", 4096, NULL, 5, NULL);
 }
