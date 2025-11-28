@@ -13,12 +13,19 @@ constexpr uint8_t START_TIME = 100;     //启摆时的驱动时间
  * 引脚宏定义
  */
 
-constexpr gpio_num_t KEY1_GPIO_NUM = GPIO_NUM_4;
+constexpr gpio_num_t KEY1_GPIO_NUM = GPIO_NUM_11;   // 编码器2
 constexpr gpio_num_t KEY2_GPIO_NUM = GPIO_NUM_5;
 constexpr gpio_num_t KEY3_GPIO_NUM = GPIO_NUM_6;
-constexpr gpio_num_t KEY4_GPIO_NUM = GPIO_NUM_7;
+constexpr gpio_num_t KEY4_GPIO_NUM = GPIO_NUM_14;   // 编码器3
 
-TaskHandle_t rotary_encoder_task_handle = NULL;
+constexpr gpio_num_t P_SET_ENCODER_A_GPIO_NUM = GPIO_NUM_10;    // 编码器1
+constexpr gpio_num_t P_SET_ENCODER_B_GPIO_NUM = GPIO_NUM_9;
+constexpr gpio_num_t I_SET_ENCODER_A_GPIO_NUM = GPIO_NUM_12;    // 编码器2
+constexpr gpio_num_t I_SET_ENCODER_B_GPIO_NUM = GPIO_NUM_13;
+constexpr gpio_num_t D_SET_ENCODER_A_GPIO_NUM = GPIO_NUM_21;    // 编码器3
+constexpr gpio_num_t D_SET_ENCODER_B_GPIO_NUM = GPIO_NUM_47;
+
+TaskHandle_t motor_encoder_task_handle = NULL;
 TaskHandle_t angle_task_handle = NULL;
 TaskHandle_t motor_task_handle = NULL;
 TaskHandle_t key_task_handle = NULL;
@@ -30,7 +37,7 @@ TaskHandle_t figure_task_handle = NULL;
 /**
  * 控制任务的通信队列
  */
-QueueHandle_t rotary_encoder_com_handle = NULL;     // 旋转编码器通信队列
+QueueHandle_t motor_encoder_com_handle = NULL;      // 电机编码器通信队列
 QueueHandle_t angle_com_handle = NULL;              // ADC通信队列
 QueueHandle_t log_runstate_com_handle = NULL;       // 日志_状态通信队列
 QueueHandle_t pid_set_com_handle = NULL;            // PID设置通信队列
@@ -39,7 +46,7 @@ QueueHandle_t figure_com_handle = NULL;             // 串口曲线打印通信�
 /**
  * 控制任务的请求队列
  */
-QueueHandle_t rotary_encoder_request_handle = NULL; // 旋转编码器请求队列
+QueueHandle_t motor_encoder_request_handle = NULL; // 旋转编码器请求队列
 QueueHandle_t angle_request_handle = NULL;          // ADC请求队列
 
 /**
@@ -48,7 +55,7 @@ QueueHandle_t angle_request_handle = NULL;          // ADC请求队列
 QueueHandle_t log_request_handle = NULL;            // 日志请求队列
 QueueHandle_t figure_request_handle = NULL;         // 曲线打印请求队列
 
-PCNT rotary_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, MOTOR_ENCODER_GPIO_A, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_A, pcnt_on_reach);
+PCNT motor_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, MOTOR_ENCODER_GPIO_A, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_A, pcnt_on_reach);
 ADC vertical_position;
 
 PID_t Location_Pid; // 外环，位置环
@@ -80,18 +87,18 @@ typedef struct logdata_t
 
 runstate_t RunState = STOPPED;
 
-void rotary_encoder_task(void *arg)
+void motor_encoder_task(void *arg)
 {
-    const char *TAG = "rotary_encoder_task";
+    const char *TAG = "motor_encoder_task";
     bool request_status = false;
     int location;
     while (true)
     {
-        xQueueReceive(rotary_encoder_request_handle, &request_status, portMAX_DELAY);
-        location = rotary_encoder.location();
+        xQueueReceive(motor_encoder_request_handle, &request_status, portMAX_DELAY);
+        location = motor_encoder.location();
         // ESP_LOGI(TAG, "编码器%d", location);
-        xQueueSendToFront(rotary_encoder_com_handle, &location, portMAX_DELAY);
-        // rotary_encoder.print_data();
+        xQueueSendToFront(motor_encoder_com_handle, &location, portMAX_DELAY);
+        // motor_encoder.print_data();
     }
 }
 
@@ -145,7 +152,7 @@ void control_task(void *arg)
 {
     const char *TAG = "control_task";
 
-    BaseType_t rotary_encoder_com_status;
+    BaseType_t motor_encoder_com_status;
     BaseType_t ADC_com_status;
 
     static uint16_t Count;
@@ -181,9 +188,9 @@ void control_task(void *arg)
     while(true)
     {
         xQueueSend(angle_request_handle, &request, portMAX_DELAY);
-        xQueueSend(rotary_encoder_request_handle, &request, portMAX_DELAY);
+        xQueueSend(motor_encoder_request_handle, &request, portMAX_DELAY);
 
-        rotary_encoder_com_status = xQueueReceive(rotary_encoder_com_handle, &Location, portMAX_DELAY);
+        motor_encoder_com_status = xQueueReceive(motor_encoder_com_handle, &Location, portMAX_DELAY);
         ADC_com_status = xQueueReceive(angle_com_handle, &Angle, portMAX_DELAY);
 
         logdata.Angle = Angle;
@@ -353,8 +360,16 @@ void control_task(void *arg)
 
 void PIDset_task(void *arg)
 {
-    ADC p_set(ADC_UNIT_2, ADC_CHANNEL_3, ADC_ATTEN_DB_12, ADC_BITWIDTH_12, "p_set");
-    float kp_temp = 0.4;
+    PCNT kp_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, 
+        P_SET_ENCODER_A_GPIO_NUM, P_SET_ENCODER_A_GPIO_NUM, 
+        P_SET_ENCODER_B_GPIO_NUM, P_SET_ENCODER_B_GPIO_NUM, pcnt_on_reach);
+    PCNT ki_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, 
+        I_SET_ENCODER_A_GPIO_NUM, I_SET_ENCODER_A_GPIO_NUM, 
+        I_SET_ENCODER_B_GPIO_NUM, I_SET_ENCODER_B_GPIO_NUM, pcnt_on_reach);
+    PCNT kd_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, 
+        D_SET_ENCODER_A_GPIO_NUM, D_SET_ENCODER_A_GPIO_NUM, 
+        D_SET_ENCODER_B_GPIO_NUM, D_SET_ENCODER_B_GPIO_NUM, pcnt_on_reach);
+    float kp_temp = 0.77;
     float ki_temp = 0;
     float kd_temp = 0;
 
@@ -367,8 +382,8 @@ void PIDset_task(void *arg)
     pid_send.Kd = 0;
     while(true)
     {
-        kp_temp = (p_set.read() / 4095.0) * 2.0; // 0 到 2.0
-        if(kp_temp - pid_send.Kp > 0.05 || kp_temp - pid_send.Kp < -0.05)
+        kp_temp = kp_set_encoder.location() / 200.0f;
+        if(kp_temp - pid_send.Kp > 0.01 || ki_temp - pid_send.Kp < -0.01)
         {
             pid_send.Kp = kp_temp;
             ESP_LOGI("PIDset_task", "更新Kp: %f", pid_send.Kp);
@@ -488,24 +503,24 @@ void key4_press_cb(void *arg,void *usr_data)
 
 extern "C" void app_main(void)
 {
-    rotary_encoder_com_handle = xQueueCreate(1, sizeof(int));
+    motor_encoder_com_handle = xQueueCreate(1, sizeof(int));
     angle_com_handle = xQueueCreate(1, sizeof(int));
     log_runstate_com_handle = xQueueCreate(1, sizeof(logdata_t));
     pid_set_com_handle = xQueueCreate(1, sizeof(PID_t));
     figure_com_handle = xQueueCreate(1, sizeof(PID_t));
 
-    rotary_encoder_request_handle = xQueueCreate(1, sizeof(bool));
+    motor_encoder_request_handle = xQueueCreate(1, sizeof(bool));
     angle_request_handle = xQueueCreate(1, sizeof(bool));
 
     log_request_handle = xQueueCreate(1, sizeof(bool));
     figure_request_handle = xQueueCreate(1, sizeof(bool));
 
-    xTaskCreate(rotary_encoder_task, "rotary_encoder_task", 1024, NULL, 9, NULL);
+    xTaskCreate(motor_encoder_task, "motor_encoder_task", 1024, NULL, 9, NULL);
     xTaskCreate(angle_task, "angle", 4096, NULL, 9, NULL); 
     xTaskCreate(motor_task, "motor_task", 4096, NULL, 9, NULL);
     xTaskCreate(key_task, "key_task", 4096, NULL, 9, NULL);
     xTaskCreate(control_task, "control_task", 8192, NULL, 10, NULL);
     xTaskCreate(log_task, "log_task", 8192, NULL, 5, NULL);
-    xTaskCreate(PIDset_task, "PIDset_task", 4096, NULL, 5, NULL);
-    xTaskCreate(figure_task, "figure_task", 4096, NULL, 5, NULL);
+    xTaskCreate(PIDset_task, "PIDset_task", 8192, NULL, 5, NULL);
+    // xTaskCreate(figure_task, "figure_task", 4096, NULL, 5, NULL);
 }
