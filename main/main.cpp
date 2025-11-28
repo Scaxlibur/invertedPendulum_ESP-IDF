@@ -196,8 +196,7 @@ void control_task(void *arg)
         logdata.Angle = Angle;
         logdata.Location = Location;
         logdata.State = RunState;
-        if(xQueueReceive(log_request_handle, &request, 0) == pdTRUE)
-            xQueueSend(log_runstate_com_handle, &logdata, portMAX_DELAY);
+        
         if(xQueueReceive(pid_set_com_handle, &receive_Pid, 0) == pdTRUE)
         {
             Angle_Pid.Kp = receive_Pid.Kp;
@@ -383,8 +382,9 @@ void PIDset_task(void *arg)
     while(true)
     {
         kp_temp = kp_set_encoder.location() / 200.0f;
+        ki_temp = ki_set_encoder.location() / 200.0f;
         if(kp_temp - pid_send.Kp > 0.01 || ki_temp - pid_send.Kp < -0.01)
-        {
+        {  
             pid_send.Kp = kp_temp;
             ESP_LOGI("PIDset_task", "更新Kp: %f", pid_send.Kp);
             xQueueSend(pid_set_com_handle, &pid_send, portMAX_DELAY);
