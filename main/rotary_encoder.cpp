@@ -21,6 +21,7 @@ PCNT::PCNT( int high_limit,
 {
     unit_config.high_limit = high_limit;
     unit_config.low_limit = low_limit;
+    unit_config.intr_priority = 0;
     filter_config.max_glitch_ns = max_glitch_ns;
     chan_a_config.edge_gpio_num = chan_a_edge_gpio_num;
     chan_a_config.level_gpio_num = chan_a_level_gpio_num;
