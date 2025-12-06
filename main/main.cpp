@@ -4,7 +4,7 @@
 #include "key.hpp"
 #include "PID.hpp"
 
-constexpr int16_t Center_Angle = 1960;  //中心角度
+constexpr int16_t Center_Angle = 2038;  //中心角度
 constexpr int16_t Center_Range = 500;   //调控区间，±500
 constexpr int16_t START_PWM = 90;       //启摆时的PWM
 constexpr uint8_t START_TIME = 100;     //启摆时的驱动时间
@@ -200,10 +200,11 @@ void control_task(void *arg)
         if(xQueueReceive(pid_set_com_handle, &receive_Pid, 0) == pdTRUE)
         {
             Angle_Pid.Kp = receive_Pid.Kp;
+            Angle_Pid.Ki = receive_Pid.Ki;
+            Angle_Pid.Kd = receive_Pid.Kd;
             ESP_LOGI(TAG, "更新PID参数：Kp=%f, Ki=%f, Kd=%f", Angle_Pid.Kp, Angle_Pid.Ki, Angle_Pid.Kd);
         }
-        if(xQueueReceive(figure_request_handle, &request, 0) == pdTRUE)
-            xQueueSend(figure_com_handle, &Angle_Pid, 0);
+
         //自动启摆程序
         switch(RunState)
         {
@@ -213,7 +214,7 @@ void control_task(void *arg)
                 if(count_stop_log >= 10000)
                 {
                     count_stop_log = 0;
-                    // ESP_LOGI(TAG, "停止状态，当前角度：%d，位置：%d", Angle, Location);
+                    ESP_LOGI(TAG, "停止状态，当前角度：%d，位置：%d", Angle, Location);
                 }
                 
                 break;
@@ -325,8 +326,10 @@ void control_task(void *arg)
                 if ( !(Center_Angle - Center_Range < Angle && Angle < Center_Angle + Center_Range) )//倒立摆不在可调控区间
                 {
                     RunState = STOPPED;
+                    ESP_LOGI(TAG, "超出调节范围");
                 }
-
+                if(xQueueReceive(figure_request_handle, &request, 0) == pdTRUE)
+                    xQueueSend(figure_com_handle, &Angle_Pid, 0);
                 // Count++;
                 // if (Count >= 1)//设置PID调控周期
                 {
@@ -359,36 +362,63 @@ void control_task(void *arg)
 
 void PIDset_task(void *arg)
 {
-    PCNT kp_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, 
-        P_SET_ENCODER_A_GPIO_NUM, P_SET_ENCODER_A_GPIO_NUM, 
-        P_SET_ENCODER_B_GPIO_NUM, P_SET_ENCODER_B_GPIO_NUM, pcnt_on_reach);
-    PCNT ki_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, 
-        I_SET_ENCODER_A_GPIO_NUM, I_SET_ENCODER_A_GPIO_NUM, 
-        I_SET_ENCODER_B_GPIO_NUM, I_SET_ENCODER_B_GPIO_NUM, pcnt_on_reach);
-    PCNT kd_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, 
-        D_SET_ENCODER_A_GPIO_NUM, D_SET_ENCODER_A_GPIO_NUM, 
-        D_SET_ENCODER_B_GPIO_NUM, D_SET_ENCODER_B_GPIO_NUM, pcnt_on_reach);
-    float kp_temp = 0.77;
-    float ki_temp = 0;
-    float kd_temp = 0;
+    PCNT kp_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 10*1000, 
+        P_SET_ENCODER_A_GPIO_NUM, P_SET_ENCODER_B_GPIO_NUM, 
+        P_SET_ENCODER_B_GPIO_NUM, P_SET_ENCODER_A_GPIO_NUM, pcnt_on_reach);
+    PCNT ki_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 10*1000, 
+        I_SET_ENCODER_A_GPIO_NUM, I_SET_ENCODER_B_GPIO_NUM, 
+        I_SET_ENCODER_B_GPIO_NUM, I_SET_ENCODER_A_GPIO_NUM, pcnt_on_reach);
+    PCNT kd_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 10*1000, 
+        D_SET_ENCODER_A_GPIO_NUM, D_SET_ENCODER_B_GPIO_NUM, 
+        D_SET_ENCODER_B_GPIO_NUM, D_SET_ENCODER_A_GPIO_NUM, pcnt_on_reach);
 
     PID_t pid_send; // 要发送的pid
-    pid_send.Target = 0;
-    pid_send.OutMax = 255;
-    pid_send.OutMin = -255;
-    pid_send.Kp = 0.4;
-    pid_send.Ki = 0;
-    pid_send.Kd = 0;
+    pid_send = Location_Pid;
+
+    int last_kp_location = 0;
+    int last_ki_location = 0;
+    int last_kd_location = 0;
+
+    int kp_location = 0;
+    int ki_location = 0;
+    int kd_location = 0;
+    
+    bool should_send = false;   // 是否发送
+
+    
     while(true)
     {
-        kp_temp = kp_set_encoder.location() / 200.0f;
-        ki_temp = ki_set_encoder.location() / 200.0f;
-        if(kp_temp - pid_send.Kp > 0.01 || ki_temp - pid_send.Kp < -0.01)
+        kp_location = kp_set_encoder.location();
+        // ki_location = ki_set_encoder.location();
+        kd_location = ki_set_encoder.location();
+
+        if(last_kp_location != kp_location)
         {  
-            pid_send.Kp = kp_temp;
+            last_kp_location = kp_location;
+            pid_send.Kp = kp_location / 200.0f;
+            should_send = true;
             ESP_LOGI("PIDset_task", "更新Kp: %f", pid_send.Kp);
-            xQueueSend(pid_set_com_handle, &pid_send, portMAX_DELAY);
         }
+        if(last_ki_location != ki_location)
+        {  
+            last_ki_location = ki_location;
+            pid_send.Ki = ki_location / 200.0f;
+            should_send = true;
+            ESP_LOGI("PIDset_task", "更新Ki: %f", pid_send.Ki);
+        }
+        if(last_kd_location != kd_location)
+        {  
+            last_kd_location = kd_location;
+            pid_send.Kd = kd_location / 200.0f;
+            should_send = true;
+            ESP_LOGI("PIDset_task", "更新Kd: %f", pid_send.Kd);
+        }
+        if(should_send)
+        {
+            xQueueSend(pid_set_com_handle, &pid_send, portMAX_DELAY);
+            should_send = false;
+        }
+            
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 
@@ -522,5 +552,5 @@ extern "C" void app_main(void)
     xTaskCreate(control_task, "control_task", 8192, NULL, 10, NULL);
     xTaskCreate(log_task, "log_task", 8192, NULL, 5, NULL);
     xTaskCreate(PIDset_task, "PIDset_task", 8192, NULL, 5, NULL);
-    // xTaskCreate(figure_task, "figure_task", 4096, NULL, 5, NULL);
+    xTaskCreate(figure_task, "figure_task", 4096, NULL, 5, NULL);
 }
