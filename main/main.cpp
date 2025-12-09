@@ -4,7 +4,7 @@
 #include "key.hpp"
 #include "PID.hpp"
 
-constexpr int16_t Center_Angle = 2038;  //中心角度
+constexpr int16_t Center_Angle = 2070;  //中心角度
 constexpr int16_t Center_Range = 500;   //调控区间，±500
 constexpr int16_t START_PWM = 90;       //启摆时的PWM
 constexpr uint8_t START_TIME = 100;     //启摆时的驱动时间
@@ -156,6 +156,7 @@ void control_task(void *arg)
     BaseType_t ADC_com_status;
 
     static uint16_t Count;
+        static uint16_t Count2;
     static uint16_t Angle0,Angle1,Angle2;//本次，上次，上上次
 
     PID_t Angle_Pid;    // 内环，角度环
@@ -164,9 +165,10 @@ void control_task(void *arg)
         Angle_Pid.Target = Center_Angle;
         Angle_Pid.OutMax = 255;
         Angle_Pid.OutMin = -255;
-        Angle_Pid.Kp = 0.3;
-        Angle_Pid.Ki = 0.0;
-        Angle_Pid.Kd = 0.0;
+        Angle_Pid.Kp = 0.5;
+        //Angle_Pid.Kp = 0.43;
+        Angle_Pid.Ki = 0.00035;
+        Angle_Pid.Kd = 0.85;
 
     //外环，位置环
     
@@ -216,7 +218,14 @@ void control_task(void *arg)
                     count_stop_log = 0;
                     ESP_LOGI(TAG, "停止状态，当前角度：%d，位置：%d", Angle, Location);
                 }
-                
+                Angle_Pid.Error0 = 0;
+                Angle_Pid.Error1 = 0;
+                Angle_Pid.ErrorInt = 0;
+                Angle_Pid.Out = 0;
+                Location_Pid.Error0 = 0;
+                Location_Pid.Error1 = 0;
+                Location_Pid.ErrorInt = 0;
+                Location_Pid.Out = 0;
                 break;
                 
             case WAITING_FOR_START: // 等待起摆检测状态
@@ -340,19 +349,19 @@ void control_task(void *arg)
                     motor_set_duty(Angle_Pid.Out);
                 }     
 
-                /*
+                
                 
                 Count2++;
                 if (Count2 >= 10)
                 {
-                    // 位置环(外环): 250ms周期，通过调整角度目标值来控制小车位置
+                    // 位置环(外环): 50ms周期，通过调整角度目标值来控制位置
                     Count2 = 0;
                     Location_Pid.Actual = Location;
                     PID_Update(&Location_Pid);
                     Angle_Pid.Target = Location_Pid.Out + Center_Angle;//位置环输出通过改变中心角度，从而实现位置的固定
                 }
                 
-                */
+                
                 
                 break;
         }
