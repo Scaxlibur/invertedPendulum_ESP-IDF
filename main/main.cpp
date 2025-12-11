@@ -137,11 +137,8 @@ void control_task(void *arg)
 {
     const char *TAG = "control_task";
 
-    BaseType_t motor_encoder_com_status;
-    BaseType_t ADC_com_status;
-
     static uint16_t Count;
-        static uint16_t Count2;
+
     static uint16_t Angle0,Angle1,Angle2;//本次，上次，上上次
 
     PID_t Angle_Pid;    // 内环，角度环
@@ -178,8 +175,8 @@ void control_task(void *arg)
         xQueueSend(angle_request_handle, &request, portMAX_DELAY);
         xQueueSend(motor_encoder_request_handle, &request, portMAX_DELAY);
 
-        motor_encoder_com_status = xQueueReceive(motor_encoder_com_handle, &Location, portMAX_DELAY);
-        ADC_com_status = xQueueReceive(angle_com_handle, &Angle, portMAX_DELAY);
+        xQueueReceive(motor_encoder_com_handle, &Location, portMAX_DELAY);
+        xQueueReceive(angle_com_handle, &Angle, portMAX_DELAY);
 
         logdata.Angle = Angle;
         logdata.Location = Location;
@@ -325,28 +322,22 @@ void control_task(void *arg)
                 }
                 if(xQueueReceive(figure_request_handle, &request, 0) == pdTRUE)
                     xQueueSend(figure_com_handle, &Angle_Pid, 0);
-                // Count++;
-                // if (Count >= 1)//设置PID调控周期
-                {
-                    // 角度环(内环): 5ms周期，直接控制电机维持角度平衡
-                    // Count = 0;
-                    Angle_Pid.Actual = Angle;
-                    PID_Update(&Angle_Pid);
-                    motor_set_duty(Angle_Pid.Out);
-                }     
 
-                Count2++;
-                if (Count2 >= 10)
+                // 角度环(内环): 5ms周期，直接控制电机维持角度平衡
+                Angle_Pid.Actual = Angle;
+                PID_Update(&Angle_Pid);
+                motor_set_duty(Angle_Pid.Out);  
+
+                Count++;
+                if (Count >= 10)
                 {
                     // 位置环(外环): 50ms周期，通过调整角度目标值来控制位置
-                    Count2 = 0;
+                    Count = 0;
                     Location_Pid.Actual = Location;
                     PID_Update(&Location_Pid);
                     Angle_Pid.Target = Center_Angle - Location_Pid.Out;//位置环输出通过改变中心角度，从而实现位置的固定
                 }
-                
-                
-                
+            
             break;
         }
         vTaskDelay(5 / portTICK_PERIOD_MS);
