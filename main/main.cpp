@@ -3,27 +3,12 @@
 #include "motor.hpp"
 #include "key.hpp"
 #include "PID.hpp"
+#include "gpionum_setting.hpp"
 
 constexpr int16_t Center_Angle = 2055;  //中心角度
 constexpr int16_t Center_Range = 500;   //调控区间，±500
-constexpr int16_t START_PWM = 90;       //启摆时的PWM
+constexpr int16_t START_PWM = 100;       //启摆时的PWM
 constexpr uint8_t START_TIME = 100;     //启摆时的驱动时间
-
-/**
- * 引脚宏定义
- */
-
-constexpr gpio_num_t KEY1_GPIO_NUM = GPIO_NUM_11;   // 编码器2
-constexpr gpio_num_t KEY2_GPIO_NUM = GPIO_NUM_5;
-constexpr gpio_num_t KEY3_GPIO_NUM = GPIO_NUM_6;
-constexpr gpio_num_t KEY4_GPIO_NUM = GPIO_NUM_14;   // 编码器3
-
-constexpr gpio_num_t P_SET_ENCODER_A_GPIO_NUM = GPIO_NUM_10;    // 编码器1
-constexpr gpio_num_t P_SET_ENCODER_B_GPIO_NUM = GPIO_NUM_9;
-constexpr gpio_num_t I_SET_ENCODER_A_GPIO_NUM = GPIO_NUM_12;    // 编码器2
-constexpr gpio_num_t I_SET_ENCODER_B_GPIO_NUM = GPIO_NUM_13;
-constexpr gpio_num_t D_SET_ENCODER_A_GPIO_NUM = GPIO_NUM_21;    // 编码器3
-constexpr gpio_num_t D_SET_ENCODER_B_GPIO_NUM = GPIO_NUM_47;
 
 TaskHandle_t motor_encoder_task_handle = NULL;
 TaskHandle_t angle_task_handle = NULL;
@@ -173,8 +158,8 @@ void control_task(void *arg)
     //外环，位置环
     
         Location_Pid.Target = 0;
-        Location_Pid.OutMax = 255;
-        Location_Pid.OutMin = -255;
+        Location_Pid.OutMax = 100;
+        Location_Pid.OutMin = -100;
         Location_Pid.Kp = 0.5;
         Location_Pid.Ki = 0.0;
         Location_Pid.Kd = 100;
@@ -278,19 +263,16 @@ void control_task(void *arg)
                 motor_set_duty(START_PWM);
                 RunState = SWINGING_UP_LEFT_DELAY;
                 // ESP_LOGI(TAG, "左侧启摆");
-                break;
 
             case SWINGING_UP_LEFT_DELAY:    // 保持脉冲一定时间(START_TIME)
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 RunState = SWINGING_UP_LEFT_BACK;
                 // ESP_LOGI(TAG, "左侧等待");
-                break;
 
             case SWINGING_UP_LEFT_BACK:
                 motor_set_duty(-START_PWM);
                 RunState = SWINGING_UP_LEFT_JUDGE;
                 // ESP_LOGI(TAG, "左侧回转");
-                break;
 
             case SWINGING_UP_LEFT_JUDGE:    // 保持脉冲后返回检测状态
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
@@ -306,19 +288,16 @@ void control_task(void *arg)
                 motor_set_duty(-START_PWM);
                 RunState = SWINGING_UP_RIGHT_DELAY;
                 // ESP_LOGI(TAG, "右侧起摆");
-                break;
 
             case SWINGING_UP_RIGHT_DELAY:    // 保持脉冲
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 RunState = SWINGING_UP_RIGHT_BACK;
                 // ESP_LOGI(TAG, "右侧等待");
-                break;
 
             case SWINGING_UP_RIGHT_BACK:    // 施加正向PWM脉冲
                 motor_set_duty(START_PWM);
                 RunState = SWINGING_UP_RIGHT_JUDGE;   
                 // ESP_LOGI(TAG, "右侧回转");
-                break;
 
             case SWINGING_UP_RIGHT_JUDGE:    // 保持脉冲后返回检测状态
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
