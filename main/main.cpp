@@ -155,12 +155,13 @@ void control_task(void *arg)
         Angle_Pid.Ki = 0.00035;
         Angle_Pid.Kd = 0.85;
 
+
     //外环，位置环
     
         Location_Pid.Target = 0;
-        Location_Pid.OutMax = 100;
-        Location_Pid.OutMin = -100;
-        Location_Pid.Kp = 0.5;
+        Location_Pid.OutMax = 75;
+        Location_Pid.OutMin = -75;
+        Location_Pid.Kp = 0.3;
         Location_Pid.Ki = 0.0;
         Location_Pid.Kd = 100;
 
@@ -263,16 +264,19 @@ void control_task(void *arg)
                 motor_set_duty(START_PWM);
                 RunState = SWINGING_UP_LEFT_DELAY;
                 // ESP_LOGI(TAG, "左侧启摆");
+                [[fallthrough]];
 
             case SWINGING_UP_LEFT_DELAY:    // 保持脉冲一定时间(START_TIME)
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 RunState = SWINGING_UP_LEFT_BACK;
                 // ESP_LOGI(TAG, "左侧等待");
+                [[fallthrough]];
 
             case SWINGING_UP_LEFT_BACK:
                 motor_set_duty(-START_PWM);
                 RunState = SWINGING_UP_LEFT_JUDGE;
                 // ESP_LOGI(TAG, "左侧回转");
+                [[fallthrough]];
 
             case SWINGING_UP_LEFT_JUDGE:    // 保持脉冲后返回检测状态
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
@@ -288,16 +292,19 @@ void control_task(void *arg)
                 motor_set_duty(-START_PWM);
                 RunState = SWINGING_UP_RIGHT_DELAY;
                 // ESP_LOGI(TAG, "右侧起摆");
+                [[fallthrough]];
 
             case SWINGING_UP_RIGHT_DELAY:    // 保持脉冲
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 RunState = SWINGING_UP_RIGHT_BACK;
                 // ESP_LOGI(TAG, "右侧等待");
+                [[fallthrough]];
 
             case SWINGING_UP_RIGHT_BACK:    // 施加正向PWM脉冲
                 motor_set_duty(START_PWM);
                 RunState = SWINGING_UP_RIGHT_JUDGE;   
                 // ESP_LOGI(TAG, "右侧回转");
+                [[fallthrough]];
 
             case SWINGING_UP_RIGHT_JUDGE:    // 保持脉冲后返回检测状态
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
