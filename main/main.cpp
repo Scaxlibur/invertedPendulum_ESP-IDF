@@ -4,7 +4,7 @@
 #include "key.hpp"
 #include "PID.hpp"
 
-constexpr int16_t Center_Angle = 2070;  //中心角度
+constexpr int16_t Center_Angle = 2055;  //中心角度
 constexpr int16_t Center_Range = 500;   //调控区间，±500
 constexpr int16_t START_PWM = 90;       //启摆时的PWM
 constexpr uint8_t START_TIME = 100;     //启摆时的驱动时间
@@ -175,9 +175,9 @@ void control_task(void *arg)
         Location_Pid.Target = 0;
         Location_Pid.OutMax = 255;
         Location_Pid.OutMin = -255;
-        Location_Pid.Kp = 0.4;
-        Location_Pid.Ki = 0;
-        Location_Pid.Kd = 4;
+        Location_Pid.Kp = 0.5;
+        Location_Pid.Ki = 0.0;
+        Location_Pid.Kd = 100;
 
     int Angle;
     int Location;
@@ -349,8 +349,6 @@ void control_task(void *arg)
                     motor_set_duty(Angle_Pid.Out);
                 }     
 
-                
-                
                 Count2++;
                 if (Count2 >= 10)
                 {
@@ -358,12 +356,12 @@ void control_task(void *arg)
                     Count2 = 0;
                     Location_Pid.Actual = Location;
                     PID_Update(&Location_Pid);
-                    Angle_Pid.Target = Location_Pid.Out + Center_Angle;//位置环输出通过改变中心角度，从而实现位置的固定
+                    Angle_Pid.Target = Center_Angle - Location_Pid.Out;//位置环输出通过改变中心角度，从而实现位置的固定
                 }
                 
                 
                 
-                break;
+            break;
         }
         vTaskDelay(5 / portTICK_PERIOD_MS);
     }
