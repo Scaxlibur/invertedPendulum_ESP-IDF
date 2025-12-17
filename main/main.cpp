@@ -74,6 +74,11 @@ typedef struct logdata_t
 
 runstate_t RunState = STOPPED;
 
+/**
+ * @brief 电机编码器任务
+ * @param[in]   来自控制任务的编码器读取请求
+ * @param[out]  当前编码器位置
+ */ 
 void motor_encoder_task(void *arg)
 {
     const char *TAG = "motor_encoder_task";
@@ -83,29 +88,33 @@ void motor_encoder_task(void *arg)
     {
         xQueueReceive(motor_encoder_request_handle, &request_status, portMAX_DELAY);
         location = motor_encoder.location();
-        // ESP_LOGI(TAG, "编码器%d", location);
         xQueueSendToFront(motor_encoder_com_handle, &location, portMAX_DELAY);
-        // motor_encoder.print_data();
     }
 }
 
+/**
+ * @brief 角度传感器任务
+ * @param[in]   来自控制任务的角度读取请求
+ * @param[out]  当前角度值
+ */
 void angle_task(void *arg)
 {
     bool request_status = false;
     int angle;
-    // ESP_LOGI("angle_task", "角度传感器任务就绪");
+    ESP_LOGI("angle_task", "角度传感器任务就绪");
     while (true)
     {
-        // ESP_LOGI("angle_task", "等待请求");
         xQueueReceive(angle_request_handle, &request_status, portMAX_DELAY);
         angle = vertical_position.read();
-        // vertical_position.print_data();
         xQueueSendToFront(angle_com_handle, &angle, portMAX_DELAY);
-
-        // ESP_LOGI("angle_task", "请求完成");
     }
 }
 
+/**
+ * @brief 电机初始化任务
+ * @param[in]   无
+ * @param[out]  无
+ */
 void motor_task(void *arg)
 {
     motor_timer_init();
@@ -118,6 +127,11 @@ void motor_task(void *arg)
     }
 }
 
+/**
+ * @brief 按键初始化任务
+ * @param[in]   无
+ * @param[out]  无
+ */
 void key_task(void *arg)
 {
     key key1("KEY1", KEY1_GPIO_NUM, key1_press_cb);
@@ -131,6 +145,15 @@ void key_task(void *arg)
     }
 }
 
+/**
+ * @brief 控制任务
+ * @param[in]   角度传感器数据
+ * @param[in]   电机编码器数据
+ * @param[in]   PID参数设置
+ * @param[in]   位置目标值设置
+ * @param[out]  角度传感器读取请求
+ * @param[out]  电机编码器读取请求
+ */
 void control_task(void *arg)
 {
     const char *TAG = "control_task";
@@ -220,7 +243,7 @@ void control_task(void *arg)
                  * 左侧最高点检测: 连续3个角度值都在中心角度-调控区间以下，且中间值为最高点
                  * 进入平衡条件: 连续2个角度值都在调控区间内
                  */
-                // ESP_LOGI(TAG, "等待状态，当前角度：%d，位置：%d", Angle, Location);
+                ESP_LOGI(TAG, "等待状态，当前角度：%d，位置：%d", Angle, Location);
                 vTaskDelay(40 / portTICK_PERIOD_MS);
 
                 Angle2 = Angle1;
@@ -262,26 +285,26 @@ void control_task(void *arg)
             case SWINGING_UP_LEFT:
                 motor_set_duty(START_PWM);
                 RunState = SWINGING_UP_LEFT_DELAY;
-                // ESP_LOGI(TAG, "左侧启摆");
+                ESP_LOGI(TAG, "左侧启摆");
                 [[fallthrough]];
 
             case SWINGING_UP_LEFT_DELAY:    // 保持脉冲一定时间(START_TIME)
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 RunState = SWINGING_UP_LEFT_BACK;
-                // ESP_LOGI(TAG, "左侧等待");
+                ESP_LOGI(TAG, "左侧等待");
                 [[fallthrough]];
 
             case SWINGING_UP_LEFT_BACK:
                 motor_set_duty(-START_PWM);
                 RunState = SWINGING_UP_LEFT_JUDGE;
-                // ESP_LOGI(TAG, "左侧回转");
+                ESP_LOGI(TAG, "左侧回转");
                 [[fallthrough]];
 
             case SWINGING_UP_LEFT_JUDGE:    // 保持脉冲后返回检测状态
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 motor_set_duty(0);
                 RunState = WAITING_FOR_START;
-                // ESP_LOGI(TAG, "左侧回转等待");
+                ESP_LOGI(TAG, "左侧回转等待");
                 break;
 
             /**
@@ -290,26 +313,26 @@ void control_task(void *arg)
             case SWINGING_UP_RIGHT:    // 施加反向PWM脉冲
                 motor_set_duty(-START_PWM);
                 RunState = SWINGING_UP_RIGHT_DELAY;
-                // ESP_LOGI(TAG, "右侧起摆");
+                ESP_LOGI(TAG, "右侧起摆");
                 [[fallthrough]];
 
             case SWINGING_UP_RIGHT_DELAY:    // 保持脉冲
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 RunState = SWINGING_UP_RIGHT_BACK;
-                // ESP_LOGI(TAG, "右侧等待");
+                ESP_LOGI(TAG, "右侧等待");
                 [[fallthrough]];
 
             case SWINGING_UP_RIGHT_BACK:    // 施加正向PWM脉冲
                 motor_set_duty(START_PWM);
                 RunState = SWINGING_UP_RIGHT_JUDGE;   
-                // ESP_LOGI(TAG, "右侧回转");
+                ESP_LOGI(TAG, "右侧回转");
                 [[fallthrough]];
 
             case SWINGING_UP_RIGHT_JUDGE:    // 保持脉冲后返回检测状态
                 vTaskDelay(START_TIME / portTICK_PERIOD_MS);
                 motor_set_duty(0);
                 RunState = WAITING_FOR_START;
-                // ESP_LOGI(TAG, "右侧回转等待");
+                ESP_LOGI(TAG, "右侧回转等待");
                 break;
 
             /**
@@ -346,6 +369,11 @@ void control_task(void *arg)
     }
 }
 
+/**
+ * @brief PID参数设置任务
+ * @warning 仅调试使用，PID调节完成后可不创建该任务
+ * @param[out] 更新后的pid值
+ */
 void PIDset_task(void *arg)
 {
     PCNT kp_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 10*1000, 
@@ -375,7 +403,7 @@ void PIDset_task(void *arg)
     while(true)
     {
         kp_location = kp_set_encoder.location();
-        // ki_location = ki_set_encoder.location();
+        ki_location = ki_set_encoder.location();
         kd_location = ki_set_encoder.location();
 
         if(last_kp_location != kp_location)
@@ -410,6 +438,11 @@ void PIDset_task(void *arg)
 
 }
 
+/**
+ * @brief 日志任务
+ * @param[in]   来自控制任务的日志请求
+ * @param[out]  当前系统状态日志
+ */
 void log_task(void *arg)    // 日志任务
 {
     constexpr uint16_t LOG_INTERVAL_MS = 1000; // 日志打印间隔时间，单位毫秒
@@ -465,6 +498,10 @@ void log_task(void *arg)    // 日志任务
     
 }
 
+/**
+ * @brief 串口曲线打印任务
+ * @param[in]   来自控制任务的曲线打印请求
+ */
 void figure_task(void *arg) // 串口曲线打印任务
 {
     constexpr char *TAG = "figure_task";
@@ -480,6 +517,11 @@ void figure_task(void *arg) // 串口曲线打印任务
     }
 }
 
+/**
+ * @brief 位置目标值设置任务
+ * @param[in]   来自控制任务的位置目标值设置请求
+ * @param[out]  当前位置目标值
+ */
 void location_set_task(void *arg)
 {
     constexpr char *TAG = "location_set_task";
