@@ -5,11 +5,6 @@
 #include "PID.hpp"
 #include "gpionum_setting.hpp"
 
-constexpr int16_t Center_Angle = 2055;  //中心角度
-constexpr int16_t Center_Range = 500;   //调控区间，±500
-constexpr int16_t START_PWM = 100;       //启摆时的PWM
-constexpr uint8_t START_TIME = 100;     //启摆时的驱动时间
-
 TaskHandle_t motor_encoder_task_handle = NULL;
 TaskHandle_t angle_task_handle = NULL;
 TaskHandle_t motor_task_handle = NULL;
@@ -42,7 +37,6 @@ QueueHandle_t angle_request_handle = NULL;          // ADC请求队列
 QueueHandle_t log_request_handle = NULL;            // 日志请求队列
 QueueHandle_t figure_request_handle = NULL;         // 曲线打印请求队列
 
-PCNT motor_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, MOTOR_ENCODER_GPIO_A, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_A, pcnt_on_reach);
 ADC vertical_position;
 
 PID_t Location_Pid; // 外环，位置环
@@ -84,6 +78,7 @@ void motor_encoder_task(void *arg)
     const char *TAG = "motor_encoder_task";
     bool request_status = false;
     int location;
+    PCNT motor_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 1000, MOTOR_ENCODER_GPIO_A, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_B, MOTOR_ENCODER_GPIO_A, NULL, "motor_encoder");
     while (true)
     {
         xQueueReceive(motor_encoder_request_handle, &request_status, portMAX_DELAY);
@@ -157,6 +152,10 @@ void key_task(void *arg)
 void control_task(void *arg)
 {
     const char *TAG = "control_task";
+    constexpr int16_t Center_Angle = 2055;  //中心角度
+    constexpr int16_t Center_Range = 500;   //调控区间，±500
+    constexpr int16_t START_PWM = 100;       //启摆时的PWM
+    constexpr uint8_t START_TIME = 100;     //启摆时的驱动时间
 
     static uint16_t Count;
 
@@ -169,7 +168,6 @@ void control_task(void *arg)
         Angle_Pid.OutMax = 255;
         Angle_Pid.OutMin = -255;
         Angle_Pid.Kp = 0.5;
-        //Angle_Pid.Kp = 0.43;
         Angle_Pid.Ki = 0.00035;
         Angle_Pid.Kd = 0.85;
 
@@ -244,7 +242,7 @@ void control_task(void *arg)
                  * 进入平衡条件: 连续2个角度值都在调控区间内
                  */
                 ESP_LOGI(TAG, "等待状态，当前角度：%d，位置：%d", Angle, Location);
-                vTaskDelay(40 / portTICK_PERIOD_MS);
+                vTaskDelay(20 / portTICK_PERIOD_MS);
 
                 Angle2 = Angle1;
                 Angle1 = Angle0;        
@@ -269,8 +267,8 @@ void control_task(void *arg)
                 {
                     RunState = SWINGING_UP_RIGHT;
                 }
-                if (Angle0 > Center_Angle - 0.8*Center_Range && Angle0 < Center_Angle + 0.8*Center_Range
-                && Angle1 > Center_Angle - 0.8*Center_Range && Angle1 < Center_Angle + 0.8*Center_Range)
+                if (Angle0 > Center_Angle - 0.75*Center_Range && Angle0 < Center_Angle + 0.75*Center_Range
+                && Angle1 > Center_Angle - 0.75*Center_Range && Angle1 < Center_Angle + 0.75*Center_Range)
                 {   // 区间乘0.8是为了能起摆到更小的调节区间，提高起摆成功率
                     Location = 0;
                     Angle_Pid.ErrorInt = 0;
@@ -378,13 +376,13 @@ void PIDset_task(void *arg)
 {
     PCNT kp_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 10*1000, 
         P_SET_ENCODER_A_GPIO_NUM, P_SET_ENCODER_B_GPIO_NUM, 
-        P_SET_ENCODER_B_GPIO_NUM, P_SET_ENCODER_A_GPIO_NUM, pcnt_on_reach);
+        P_SET_ENCODER_B_GPIO_NUM, P_SET_ENCODER_A_GPIO_NUM, NULL, "kp_set_encoder");
     PCNT ki_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 10*1000, 
         I_SET_ENCODER_A_GPIO_NUM, I_SET_ENCODER_B_GPIO_NUM, 
-        I_SET_ENCODER_B_GPIO_NUM, I_SET_ENCODER_A_GPIO_NUM, pcnt_on_reach);
+        I_SET_ENCODER_B_GPIO_NUM, I_SET_ENCODER_A_GPIO_NUM, NULL, "ki_set_encoder");
     PCNT kd_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 10*1000, 
         D_SET_ENCODER_A_GPIO_NUM, D_SET_ENCODER_B_GPIO_NUM, 
-        D_SET_ENCODER_B_GPIO_NUM, D_SET_ENCODER_A_GPIO_NUM, pcnt_on_reach);
+        D_SET_ENCODER_B_GPIO_NUM, D_SET_ENCODER_A_GPIO_NUM, NULL, "kd_set_encoder");
 
     PID_t pid_send; // 要发送的pid
     pid_send = Location_Pid;
@@ -530,7 +528,7 @@ void location_set_task(void *arg)
     float last_location = location;
     PCNT location_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 10*1000, 
         I_SET_ENCODER_A_GPIO_NUM, I_SET_ENCODER_B_GPIO_NUM, 
-        I_SET_ENCODER_B_GPIO_NUM, I_SET_ENCODER_A_GPIO_NUM, pcnt_on_reach);
+        I_SET_ENCODER_B_GPIO_NUM, I_SET_ENCODER_A_GPIO_NUM, NULL, "location_set_encoder");
     while(true)
     {
         location = location_set_encoder.location() * -20.0f;
@@ -596,13 +594,13 @@ extern "C" void app_main(void)
     log_request_handle = xQueueCreate(1, sizeof(bool));
     figure_request_handle = xQueueCreate(1, sizeof(bool));
 
-    xTaskCreate(motor_encoder_task, "motor_encoder_task", 1024, NULL, 9, NULL);
+    xTaskCreate(motor_encoder_task, "motor_encoder_task", 4096, NULL, 9, NULL);
     xTaskCreate(angle_task, "angle", 4096, NULL, 9, NULL); 
     xTaskCreate(motor_task, "motor_task", 4096, NULL, 9, NULL);
     xTaskCreate(key_task, "key_task", 4096, NULL, 9, NULL);
     xTaskCreate(control_task, "control_task", 8192, NULL, 10, NULL);
     xTaskCreate(log_task, "log_task", 8192, NULL, 5, NULL);
-    // xTaskCreate(PIDset_task, "PIDset_task", 8192, NULL, 5, NULL);
+    xTaskCreate(PIDset_task, "PIDset_task", 8192, NULL, 5, NULL);
     // xTaskCreate(figure_task, "figure_task", 4096, NULL, 5, NULL);
-    xTaskCreate(location_set_task, "location_set_task", 4096, NULL, 5, NULL);
+    // xTaskCreate(location_set_task, "location_set_task", 4096, NULL, 5, NULL);
 }
