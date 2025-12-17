@@ -18,6 +18,7 @@ TaskHandle_t control_task_handle = NULL;
 TaskHandle_t log_task_handle = NULL;
 TaskHandle_t PIDset_task_handle = NULL;
 TaskHandle_t figure_task_handle = NULL;
+TaskHandle_t location_set_task_handle = NULL;
 
 /**
  * 控制任务的通信队列
@@ -27,11 +28,12 @@ QueueHandle_t angle_com_handle = NULL;              // ADC通信队列
 QueueHandle_t log_runstate_com_handle = NULL;       // 日志_状态通信队列
 QueueHandle_t pid_set_com_handle = NULL;            // PID设置通信队列
 QueueHandle_t figure_com_handle = NULL;             // 串口曲线打印通信队列
+QueueHandle_t location_set_com_handle = NULL;   // 位置设置通信队列
 
 /**
  * 控制任务的请求队列
  */
-QueueHandle_t motor_encoder_request_handle = NULL; // 旋转编码器请求队列
+QueueHandle_t motor_encoder_request_handle = NULL;  // 旋转编码器请求队列
 QueueHandle_t angle_request_handle = NULL;          // ADC请求队列
 
 /**
@@ -164,6 +166,7 @@ void control_task(void *arg)
 
     int Angle;
     int Location;
+    float set_location_target;
     logdata_t logdata;
 
     uint16_t count_stop_log = 0;
@@ -177,6 +180,9 @@ void control_task(void *arg)
 
         xQueueReceive(motor_encoder_com_handle, &Location, portMAX_DELAY);
         xQueueReceive(angle_com_handle, &Angle, portMAX_DELAY);
+        xQueueReceive(location_set_com_handle, &set_location_target, 0);
+
+        Location_Pid.Target = set_location_target;
 
         logdata.Angle = Angle;
         logdata.Location = Location;
@@ -188,7 +194,7 @@ void control_task(void *arg)
             Angle_Pid.Ki = receive_Pid.Ki;
             Angle_Pid.Kd = receive_Pid.Kd;
             ESP_LOGI(TAG, "更新PID参数：Kp=%f, Ki=%f, Kd=%f", Angle_Pid.Kp, Angle_Pid.Ki, Angle_Pid.Kd);
-        }
+        }    
 
         //自动启摆程序
         switch(RunState)
@@ -478,6 +484,28 @@ void figure_task(void *arg) // 串口曲线打印任务
     }
 }
 
+void location_set_task(void *arg)
+{
+    constexpr char *TAG = "location_set_task";
+    bool request = false;
+    float location = 0;
+    float last_location = location;
+    PCNT location_set_encoder(PCNT_HIGH_LIMIT, PCNT_LOW_LIMIT, 10*1000, 
+        I_SET_ENCODER_A_GPIO_NUM, I_SET_ENCODER_B_GPIO_NUM, 
+        I_SET_ENCODER_B_GPIO_NUM, I_SET_ENCODER_A_GPIO_NUM, pcnt_on_reach);
+    while(true)
+    {
+        location = location_set_encoder.location() * -20.0f;
+        if(last_location != location)
+        {
+            last_location = location;
+            ESP_LOGI(TAG, "位置目标值改变为：%f", location);
+            xQueueSend(location_set_com_handle, &location, portMAX_DELAY);
+        }
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+}
+
 void key1_press_cb(void *arg,void *usr_data)
 {
     ESP_LOGI("key1", "按下，启动/停止切换");
@@ -522,6 +550,7 @@ extern "C" void app_main(void)
     log_runstate_com_handle = xQueueCreate(1, sizeof(logdata_t));
     pid_set_com_handle = xQueueCreate(1, sizeof(PID_t));
     figure_com_handle = xQueueCreate(1, sizeof(PID_t));
+    location_set_com_handle = xQueueCreate(1, sizeof(float));
 
     motor_encoder_request_handle = xQueueCreate(1, sizeof(bool));
     angle_request_handle = xQueueCreate(1, sizeof(bool));
@@ -535,6 +564,7 @@ extern "C" void app_main(void)
     xTaskCreate(key_task, "key_task", 4096, NULL, 9, NULL);
     xTaskCreate(control_task, "control_task", 8192, NULL, 10, NULL);
     xTaskCreate(log_task, "log_task", 8192, NULL, 5, NULL);
-    xTaskCreate(PIDset_task, "PIDset_task", 8192, NULL, 5, NULL);
-    xTaskCreate(figure_task, "figure_task", 4096, NULL, 5, NULL);
+    // xTaskCreate(PIDset_task, "PIDset_task", 8192, NULL, 5, NULL);
+    // xTaskCreate(figure_task, "figure_task", 4096, NULL, 5, NULL);
+    xTaskCreate(location_set_task, "location_set_task", 4096, NULL, 5, NULL);
 }
