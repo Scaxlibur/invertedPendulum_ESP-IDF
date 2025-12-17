@@ -250,9 +250,9 @@ void control_task(void *arg)
                 {
                     RunState = SWINGING_UP_RIGHT;
                 }
-                if (Angle0 > Center_Angle - Center_Range && Angle0 < Center_Angle + Center_Range
-                && Angle1 > Center_Angle - Center_Range && Angle1 < Center_Angle + Center_Range)
-                {
+                if (Angle0 > Center_Angle - 0.8*Center_Range && Angle0 < Center_Angle + 0.8*Center_Range
+                && Angle1 > Center_Angle - 0.8*Center_Range && Angle1 < Center_Angle + 0.8*Center_Range)
+                {   // 区间乘0.8是为了能起摆到更小的调节区间，提高起摆成功率
                     Location = 0;
                     Angle_Pid.ErrorInt = 0;
                     Location_Pid.ErrorInt = 0;
