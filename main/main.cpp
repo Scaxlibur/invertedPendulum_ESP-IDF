@@ -111,11 +111,7 @@ void motor_task(void *arg)
     motor_timer_init();
     motor_channel_init();
     motor_control_init();
-    motor_set_duty(100);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    motor_set_duty(-100);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    // ESP_LOGI("motor_task", "电机任务就绪");
+    ESP_LOGI("motor_task", "电机任务就绪");
     while (true)
     {
         vTaskDelay(portMAX_DELAY);
