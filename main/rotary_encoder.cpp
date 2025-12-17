@@ -16,7 +16,8 @@ PCNT::PCNT( int high_limit,
             int chan_a_level_gpio_num,
             int chan_b_edge_gpio_num,
             int chan_b_level_gpio_num,
-            pcnt_watch_cb_t on_reach
+            pcnt_watch_cb_t on_reach,
+            const char *TAG
 )
 {
     unit_config.high_limit = high_limit;
@@ -28,6 +29,7 @@ PCNT::PCNT( int high_limit,
     chan_b_config.edge_gpio_num = chan_b_edge_gpio_num;
     chan_b_config.level_gpio_num = chan_b_level_gpio_num;
     cbs.on_reach = on_reach;
+    this->TAG = TAG;
 
     rotary_encoder_init();
 }

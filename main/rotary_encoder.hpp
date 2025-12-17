@@ -38,7 +38,7 @@ class PCNT
     int event_count = 0;
     int last_call_count = 0;
 
-    const char *TAG = "PCNT";
+    const char *TAG;
 
     public:
 
@@ -49,7 +49,8 @@ class PCNT
             int chan_a_level_gpio_num,
             int chan_b_edge_gpio_num,
             int chan_b_level_gpio_num,
-            pcnt_watch_cb_t on_reach
+            pcnt_watch_cb_t on_reach,
+            const char *TAG
         );
     ~PCNT();
     void print_count();
